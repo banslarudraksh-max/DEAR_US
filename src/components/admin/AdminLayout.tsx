@@ -517,7 +517,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
   const currentNav = NAV_ITEMS.find(n => n.id === activeSection);
 
   return (
-    <div className="min-h-screen bg-[#110413] text-[#FAF7F2] flex flex-col font-sans selection:bg-[#7D2146] selection:text-white">
+    <div className="min-h-[100dvh] bg-[#110413] text-[#FAF7F2] flex flex-col font-sans selection:bg-[#7D2146] selection:text-white">
       {/* Top Bar Header */}
       <header className="sticky top-0 z-40 border-b border-[#DFBF99]/20 bg-[#17071A]/95 backdrop-blur-md px-4 sm:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -579,13 +579,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Sidebar Navigation */}
         <aside
-          className={`fixed inset-y-0 left-0 z-30 w-64 transform border-r border-[#DFBF99]/20 bg-[#160618]/98 p-4 backdrop-blur-xl transition-transform duration-300 md:static md:translate-x-0 overflow-y-auto flex flex-col justify-between ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
+  className={`fixed inset-y-0 left-0 z-30 w-64 transform border-r border-[#DFBF99]/20 bg-[#160618]/98 p-4 backdrop-blur-xl transition-transform duration-300 md:static md:translate-x-0 flex flex-col justify-between ${
+    isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+  }`}
+>
           <div className="space-y-6">
             {/* Logo / Heading */}
             <div className="px-2 pt-1 pb-3 border-b border-[#DFBF99]/15">
@@ -738,7 +738,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         )}
 
         {/* Main Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 overscroll-contain min-h-0">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
             {activeSection === 'overview' && (
               <AdminOverview
