@@ -174,25 +174,3 @@ html.light .border-\[\#DFBF99\]\/25 {
   background-image: radial-gradient(rgba(223, 191, 153, 0.07) 1px, transparent 0);
   background-size: 24px 24px;
 }
-/* Mobile scrolling fix */
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
-  margin: 0;
-}
-
-html {
-  overflow-x: hidden;
-}
-
-body {
-  overflow-x: hidden;
-  overflow-y: auto;
-  min-height: 100dvh;
-}
-
-#root {
-  min-height: 100dvh;
-}
