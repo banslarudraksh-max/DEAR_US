@@ -214,17 +214,32 @@ export async function uploadFileToVaultStorage(
       onProgress?.(85);
 
       // Obtain public URL from Supabase
-      const { data: publicUrlData } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(storagePath);
+      // Create a signed URL because vault-photos is a private bucket
+const { data: signedUrlData, error: signedUrlError } =
+  await supabase.storage
+    .from(bucketName)
+    .createSignedUrl(storagePath, 3600);
 
-      const publicUrl = publicUrlData?.publicUrl;
-      onProgress?.(100);
+if (signedUrlError || !signedUrlData?.signedUrl) {
+  console.warn(
+    'Could not create signed image URL:',
+    signedUrlError?.message || 'Unknown error'
+  );
 
-      return {
-        url: publicUrl || dataUrl,
-        path: storagePath,
-      };
+  onProgress?.(100);
+
+  return {
+    url: dataUrl,
+    path: storagePath,
+  };
+}
+
+onProgress?.(100);
+
+return {
+  url: signedUrlData.signedUrl,
+  path: storagePath,
+};
     } catch (storageErr: any) {
       console.warn(
         'Supabase storage upload bypassed due to security/network policy, using local image storage:',
