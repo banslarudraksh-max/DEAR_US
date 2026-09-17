@@ -1,0 +1,6 @@
+{
+  "name": "Dear Us",
+  "description": "A private, romantic digital memory vault for two people to preserve moments, stories, letters, places, milestones, and future dreams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
