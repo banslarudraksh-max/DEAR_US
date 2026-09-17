@@ -738,7 +738,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         )}
 
         {/* Main Content Viewport */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-24">
           <div className="max-w-7xl mx-auto">
             {activeSection === 'overview' && (
               <AdminOverview
