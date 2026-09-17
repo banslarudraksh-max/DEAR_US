@@ -741,14 +741,32 @@ class VaultStorageService {
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
         const filePath = `${bucket}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+  .from(bucket)
+  .upload(filePath, file);
 
-        if (!uploadError) {
-          const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-          if (data?.publicUrl) {
-            return data.publicUrl;
-          }
-        }
+if (!uploadError) {
+  if (bucket === 'memories') {
+    const { data: signedData, error: signedError } =
+      await supabase.storage
+        .from('memories')
+        .createSignedUrl(filePath, 3600);
+
+    if (!signedError && signedData?.signedUrl) {
+      return signedData.signedUrl;
+    }
+
+    console.warn('Failed to create signed URL:', signedError);
+  } else {
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(filePath);
+
+    if (data?.publicUrl) {
+      return data.publicUrl;
+    }
+  }
+}
       } catch (err) {
         console.warn('Supabase storage upload failed, falling back to local data URL:', err);
       }
