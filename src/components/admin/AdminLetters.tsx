@@ -243,7 +243,7 @@ export const AdminLetters: React.FC<AdminLettersProps> = ({
       {/* Preview Modal */}
       <AnimatePresence>
         {previewLetter && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center bg-black/80 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -303,7 +303,7 @@ export const AdminLetters: React.FC<AdminLettersProps> = ({
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="w-full max-w-xl rounded-2xl border border-[#DFBF99]/30 bg-[#19081B] p-6 sm:p-8 text-left shadow-2xl"
+              className="w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-[#DFBF99]/30 bg-[#19081B] p-6 sm:p-8 text-left shadow-2xl"
             >
               <div className="flex items-center justify-between border-b border-[#DFBF99]/15 pb-4 mb-6">
                 <h3 className="editorial-title text-2xl text-[#FAF7F2] font-normal">
