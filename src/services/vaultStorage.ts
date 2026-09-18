@@ -2148,10 +2148,86 @@ async getBucketList(): Promise<BucketListItem[]> {
     );
   }
   }
-  async deleteMediaItem(id: string): Promise<void> {
-    const list = await this.getMediaLibrary();
-    const updated = list.filter((m) => m.id !== id);
-    saveToStorage(STORAGE_KEYS.MEDIA_ITEMS, updated);
+  async deleteMediaItem(
+  id: string,
+  url?: string
+): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  // Remove from localStorage
+  const list = await this.getMediaLibrary();
+  const updated = list.filter((m) => m.id !== id);
+
+  saveToStorage(
+    STORAGE_KEYS.MEDIA_ITEMS,
+    updated
+  );
+
+  if (!supabase) {
+    console.warn('Supabase client not available');
+    return;
+  }
+
+  try {
+    // Get logged-in user
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser();
+
+    if (userError || !userData.user) {
+      throw new Error(
+        'You must be logged in to delete media.'
+      );
+    }
+
+    const user = userData.user;
+
+    // Delete database record
+    const { error: dbError } = await supabase
+      .from('media_assets')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (dbError) {
+      throw dbError;
+    }
+
+    // Delete actual image from vault-photos
+    if (url) {
+      const marker =
+        '/storage/v1/object/public/vault-photos/';
+
+      const index = url.indexOf(marker);
+
+      if (index !== -1) {
+        const filePath =
+          url.substring(index + marker.length);
+
+        const { error: storageError } =
+          await supabase.storage
+            .from('vault-photos')
+            .remove([filePath]);
+
+        if (storageError) {
+          console.error(
+            'Storage delete error:',
+            storageError
+          );
+        }
+      }
+    }
+
+    console.log(
+      '✅ Media deleted successfully'
+    );
+  } catch (error) {
+    console.error(
+      '❌ Failed to delete media:',
+      error
+    );
+
+    throw error;
+  }
   }
 
   async replaceMediaUrl(oldUrl: string, newUrl: string): Promise<{ affectedCount: number }> {
