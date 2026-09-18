@@ -177,16 +177,7 @@ export const AdminMediaLibrary: React.FC<AdminMediaLibraryProps> = ({
     );
   }
 };
-    setNewMediaName(file.name.replace(/\.[^/.]+$/, ''));
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        setNewMediaUrl(reader.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
+  
   const handleSubmitUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMediaUrl.trim()) return;
