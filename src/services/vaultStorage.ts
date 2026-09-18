@@ -681,36 +681,61 @@ class VaultStorageService {
 
   // Letters
   async getLetters(): Promise<FutureLetter[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('letters').select('*').order('created_date', { ascending: false });
-        if (!error && data && data.length > 0) {
-          const mapped: FutureLetter[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            message: d.message,
-            senderName: d.sender_name,
-            senderId: d.sender_id,
-            recipientName: d.recipient_name,
-            createdDate: d.created_date,
-            unlockDate: d.unlock_date,
-            photoUrl: d.photo_url,
-            songTitle: d.song_title,
-            songUrl: d.song_url || d.voice_note_url,
-            voiceNoteUrl: d.voice_note_url || d.song_url,
-            isOpened: d.is_opened,
-            sealColor: d.seal_color,
-            createdAt: d.created_at,
-          }));
-          saveToStorage(STORAGE_KEYS.LETTERS, mapped);
-          return mapped;
-        }
-      } catch (e) {
-        console.warn('Supabase letters error:', e);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('future_letters')
+        .select('*')
+        .order('created_date', { ascending: false });
+
+      if (error) {
+        console.error(
+          'Supabase letters fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: FutureLetter[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          message: d.message,
+
+          senderName: d.sender_name,
+          senderId: d.sender_id,
+          recipientName: d.recipient_name,
+
+          createdDate: d.created_date,
+          unlockDate: d.unlock_date,
+
+          photoUrl: d.photo_url,
+
+          voiceNoteUrl: d.voice_note_url || null,
+
+          isOpened: d.is_opened ?? false,
+          sealColor: d.seal_color,
+
+          createdAt: d.created_at,
+        }));
+
+        saveToStorage(STORAGE_KEYS.LETTERS, mapped);
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        'Supabase letters error:',
+        error
+      );
     }
-    return loadFromStorage<FutureLetter[]>(STORAGE_KEYS.LETTERS, demoLetters);
+  }
+
+  return loadFromStorage<FutureLetter[]>(
+    STORAGE_KEYS.LETTERS,
+    demoLetters
+  );
   }
 
   async saveLetter(letter: FutureLetter): Promise<FutureLetter> {
