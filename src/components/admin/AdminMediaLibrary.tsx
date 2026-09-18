@@ -59,117 +59,98 @@ export const AdminMediaLibrary: React.FC<AdminMediaLibraryProps> = ({
     const map = new Map<string, AdminMediaItem>();
 
     // Existing media library items
-    mediaList.forEach((media) => {
-      if (media.url) {
-        map.set(media.url, {
-          ...media,
-          usedIn: Array.isArray(media.usedIn) ? [...media.usedIn] : [],
-        });
-      }
+    // Existing media library items
+mediaList.forEach((media) => {
+  if (media.url) {
+    map.set(media.url, {
+      ...media,
+      usedIn: Array.isArray(media.usedIn) ? [...media.usedIn] : [],
     });
+  }
+});
 
-    // Memories
-    memories.forEach((memory) => {
-      memory.photos?.forEach((url, index) => {
-        if (!url) return;
+// Memories
+memories.forEach((memory) => {
+  memory.photos?.forEach((url, index) => {
+    if (!url) return;
 
-        if (!map.has(url)) {
-          map.set(url, {
-            id: `media-mem-${memory.id}-${index}`,
-            url,
-            fileName: `${memory.title.slice(0, 24)} - Photo ${index + 1}`,
-            uploadedAt:
-              memory.date || new Date().toISOString(),
-            size: '2.4 MB',
-            dimensions: '1920x1080',
-            usedIn: [`Memory: ${memory.title}`],
-          });
-        } else {
-          const item = map.get(url)!;
-          const usage = `Memory: ${memory.title}`;
-
-          if (!item.usedIn.includes(usage)) {
-            item.usedIn.push(usage);
-          }
-        }
+    if (!map.has(url)) {
+      map.set(url, {
+        id: `media-mem-${memory.id}-${index}`,
+        url,
+        fileName: `${memory.title.slice(0, 24)} - Photo ${index + 1}`,
+        uploadedAt:
+          memory.date || new Date().toISOString(),
+        size: '2.4 MB',
+        dimensions: '1920x1080',
+        usedIn: [`Memory: ${memory.title}`],
       });
-    });
+    } else {
+      const item = map.get(url)!;
+      const usage = `Memory: ${memory.title}`;
 
-    // Timeline / milestones
-    timeline.forEach((event) => {
-      if (!event.photoUrl) return;
-
-      const url = event.photoUrl;
-
-      if (!map.has(url)) {
-        map.set(url, {
-          id: `media-tl-${event.id}`,
-          url,
-          fileName: `Milestone - ${event.title.slice(0, 24)}`,
-          uploadedAt:
-            event.date || new Date().toISOString(),
-          size: '1.8 MB',
-          dimensions: '1600x1200',
-          usedIn: [`Milestone: ${event.title}`],
-        });
-      } else {
-        const item = map.get(url)!;
-        const usage = `Milestone: ${event.title}`;
-
-        if (!item.usedIn.includes(usage)) {
-          item.usedIn.push(usage);
-        }
+      if (!item.usedIn.includes(usage)) {
+        item.usedIn.push(usage);
       }
+    }
+  });
+});
+
+// Timeline / milestones
+timeline.forEach((event) => {
+  if (!event.photoUrl) return;
+
+  const url = event.photoUrl;
+
+  if (!map.has(url)) {
+    map.set(url, {
+      id: `media-tl-${event.id}`,
+      url,
+      fileName: `Milestone - ${event.title.slice(0, 24)}`,
+      uploadedAt:
+        event.date || new Date().toISOString(),
+      size: '1.8 MB',
+      dimensions: '1600x1200',
+      usedIn: [`Milestone: ${event.title}`],
     });
+  } else {
+    const item = map.get(url)!;
+    const usage = `Milestone: ${event.title}`;
 
-    // Places / Atlas
-    places.forEach((place) => {
-      place.photos?.forEach((url, index) => {
-        if (!url) return;
+    if (!item.usedIn.includes(usage)) {
+      item.usedIn.push(usage);
+    }
+  }
+});
 
-        if (!map.has(url)) {
-          map.set(url, {
-            id: `media-pl-${place.id}-${index}`,
-            url,
-            fileName: `${place.name} - Photo ${index + 1}`,
-            uploadedAt:
-              place.visitDate || new Date().toISOString(),
-            size: '2.1 MB',
-            dimensions: '1920x1280',
-            usedIn: [`Atlas: ${place.name}`],
-          });
-        } else {
-          const item = map.get(url)!;
-          const usage = `Atlas: ${place.name}`;
+// Places / Atlas
+places.forEach((place) => {
+  place.photos?.forEach((url, index) => {
+    if (!url) return;
 
-          if (!item.usedIn.includes(usage)) {
-            item.usedIn.push(usage);
-          }
-        }
+    if (!map.has(url)) {
+      map.set(url, {
+        id: `media-pl-${place.id}-${index}`,
+        url,
+        fileName: `${place.name} - Photo ${index + 1}`,
+        uploadedAt:
+          place.visitDate || new Date().toISOString(),
+        size: '2.1 MB',
+        dimensions: '1920x1280',
+        usedIn: [`Atlas: ${place.name}`],
       });
-    });
+    } else {
+      const item = map.get(url)!;
+      const usage = `Atlas: ${place.name}`;
 
-    return Array.from(map.values());
-  }, [mediaList, memories, places, timeline]);
+      if (!item.usedIn.includes(usage)) {
+        item.usedIn.push(usage);
+      }
+    }
+  });
+});
 
-  const filteredMedia = consolidatedMedia.filter((media) => {
-    const query = searchTerm.trim().toLowerCase();
-
-    if (!query) return true;
-
-    const matchesFileName =
-      Boolean(media.fileName) &&
-      media.fileName!.toLowerCase().includes(query);
-
-    const matchesUsage =
-      Array.isArray(media.usedIn) &&
-      media.usedIn.some(
-        (usage) =>
-          typeof usage === 'string' &&
-          usage.toLowerCase().includes(query)
-      );
-
-    return matchesFileName || matchesUsage;
+return Array.from(map.values());
   });
 
   const handleCopy = async (url: string) => {
