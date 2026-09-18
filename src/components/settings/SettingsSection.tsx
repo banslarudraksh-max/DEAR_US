@@ -41,27 +41,17 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
   const [passcode, setPasscode] = useState(profile.vaultPasscode || '');
   const [passcodeEnabled, setPasscodeEnabled] = useState(!!profile.vaultPasscode);
 
-  const handleProfileSave = async (e: React.FormEvent) => {
+  const handleProfileSave = (e: React.FormEvent) => {
   e.preventDefault();
-
-  try {
-    await updateProfile({
-      name: partner1Name,
-      partnerName: partner2Name,
-      anniversaryDate,
-      meetingDate,
-      vaultPasscode: passcodeEnabled ? passcode : undefined,
-    });
-
-    setSaveSuccess(true);
-
-    setTimeout(() => {
-      setSaveSuccess(false);
-    }, 3000);
-  } catch (error) {
-    console.error('Profile save failed:', error);
-    setSaveSuccess(false);
-  }
+  updateProfile({
+    name: partner1Name,
+    partnerName: partner2Name,
+    anniversaryDate,
+    meetingDate,
+    vaultPasscode: passcodeEnabled ? passcode : undefined,
+  });
+  setSaveSuccess(true);
+  setTimeout(() => setSaveSuccess(false), 3000);
 };
 
   const handleExportVault = async () => {
