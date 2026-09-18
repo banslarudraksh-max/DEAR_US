@@ -6,7 +6,7 @@ import {
   PlaceMemory,
   TimelineEvent,
 } from '../../types';
-import { vaultStorage } from '../../vaultStorage';
+import { vaultStorage } from '../../services/vaultStorage';
 
 import {
   Camera,
