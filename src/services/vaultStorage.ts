@@ -430,40 +430,73 @@ class VaultStorageService {
   }
 
   async saveTimelineEvent(event: TimelineEvent): Promise<TimelineEvent> {
-    const events = await this.getTimeline();
-    const idx = events.findIndex((e) => e.id === event.id);
-    let updated: TimelineEvent[];
-    if (idx >= 0) {
-      updated = [...events];
-      updated[idx] = event;
-    } else {
-      updated = [...events, event].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }
-    saveToStorage(STORAGE_KEYS.TIMELINE, updated);
+  const events = await this.getTimeline();
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('timeline_events').upsert({
-          id: event.id,
-          user_id: event.userId,
-          title: event.title,
-          date: event.date,
-          description: event.description,
-          photos: event.photos,
-          location: event.location,
-          category: event.category,
-          tags: event.tags,
-          voice_note_url: event.voiceNoteUrl || event.songUrl,
-          song_title: event.songTitle,
-          song_url: event.songUrl,
-          is_milestone: event.isMilestone,
-        });
-      } catch (e) {
-        console.warn('Supabase timeline save error:', e);
+  const idx = events.findIndex((e) => e.id === event.id);
+
+  let updated: TimelineEvent[];
+
+  if (idx >= 0) {
+    updated = [...events];
+    updated[idx] = event;
+  } else {
+    updated = [...events, event].sort(
+      (a, b) =>
+        new Date(a.date).getTime() -
+        new Date(b.date).getTime()
+    );
+  }
+
+  // Local fallback/cache
+  saveToStorage(STORAGE_KEYS.TIMELINE, updated);
+
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('timeline_events')
+        .upsert(
+          {
+            id: event.id,
+            user_id: event.userId || null,
+            title: event.title,
+            date: event.date,
+            description: event.description || '',
+            photo_url: event.photoUrl || null,
+            photos: event.photos || [],
+            location: event.location || null,
+            category: event.category || 'Special',
+            tags: event.tags || [],
+            voice_note_url: event.voiceNoteUrl || null,
+            is_milestone: event.isMilestone ?? false,
+          },
+          {
+            onConflict: 'id',
+          }
+        );
+
+      if (error) {
+        console.error(
+          'Supabase timeline save error:',
+          error.message,
+          error
+        );
+      } else {
+        console.log(
+          'Timeline event saved to Supabase:',
+          event.id
+        );
       }
+    } catch (e) {
+      console.error(
+        'Supabase timeline save exception:',
+        e
+      );
     }
-    return event;
+  }
+
+  return event;
   }
 
   async deleteTimelineEvent(id: string): Promise<void> {
