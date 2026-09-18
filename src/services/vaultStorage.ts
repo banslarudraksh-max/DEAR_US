@@ -553,36 +553,61 @@ class VaultStorageService {
 
   // Places
   async getPlaces(): Promise<PlaceMemory[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('places').select('*').order('date', { ascending: false });
-        if (!error && data && data.length > 0) {
-          const mapped: PlaceMemory[] = data.map((d: any) => ({
-            id: d.id,
-            name: d.name,
-            location: d.location,
-            latitude: d.latitude,
-            longitude: d.longitude,
-            date: d.date,
-            coverImage: d.cover_image,
-            photos: d.photos || [],
-            notes: d.notes || '',
-            relatedMemoryIds: d.related_memory_ids || [],
-            userId: d.user_id,
-            isVisited: d.is_visited,
-            createdAt: d.created_at,
-          }));
-          saveToStorage(STORAGE_KEYS.PLACES, mapped);
-          return mapped;
-        }
-      } catch (e) {
-        console.warn('Supabase places error:', e);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('places')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error(
+          'Supabase places fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: PlaceMemory[] = data.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          location: d.location,
+          country: d.country || '',
+          latitude: d.latitude,
+          longitude: d.longitude,
+          date: d.date,
+          visitDate: d.visit_date,
+          coverImage: d.cover_image,
+          photos: d.photos || [],
+          notes: d.notes || '',
+          relatedMemoryIds: d.related_memory_ids || [],
+          userId: d.user_id,
+          isVisited: d.is_visited ?? false,
+          createdAt: d.created_at,
+        }));
+
+        saveToStorage(
+          STORAGE_KEYS.PLACES,
+          mapped
+        );
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        'Supabase places error:',
+        error
+      );
     }
-    return loadFromStorage<PlaceMemory[]>(STORAGE_KEYS.PLACES, demoPlaces);
   }
 
+  return loadFromStorage<PlaceMemory[]>(
+    STORAGE_KEYS.PLACES,
+    demoPlaces
+  );
+  }
   async savePlace(place: PlaceMemory): Promise<PlaceMemory> {
   const places = await this.getPlaces();
 
