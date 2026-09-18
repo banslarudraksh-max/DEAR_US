@@ -1931,12 +1931,12 @@ async getBucketList(): Promise<BucketListItem[]> {
   }
 
   // Media Library
-  async getMediaLibrary(): Promise<AdminMediaItem[]> {
+async getMediaLibrary(): Promise<AdminMediaItem[]> {
   const supabase = getSupabaseClient();
 
-  // 1. Get manually uploaded media assets from Supabase
   let stored: AdminMediaItem[] = [];
 
+  // 1. Get media assets from Supabase
   if (supabase) {
     try {
       const { data: userData, error: userError } =
@@ -1949,123 +1949,80 @@ async getBucketList(): Promise<BucketListItem[]> {
           .from('media_assets')
           .select('*')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+          .order('created_at', {
+            ascending: false,
+          });
 
         if (error) {
-          console.error('❌ Supabase media library fetch error:', error);
+          console.error(
+            '❌ Supabase media library fetch error:',
+            error
+          );
         } else if (data) {
-          stored = data.map((m: any): AdminMediaItem => ({
-            id: m.id,
-            name: m.name || undefined,
-            fileName: m.file_name || undefined,
-            url: m.url,
-            sizeBytes: m.size_bytes ?? undefined,
-            size: m.size || undefined,
-            dimensions: m.dimensions || undefined,
-            mimeType: m.mime_type || undefined,
-            uploadedAt: m.uploaded_at || m.created_at,
-            usedIn: Array.isArray(m.used_in) ? m.used_in : [],
-          }));
-
-          saveToStorage(STORAGE_KEYS.MEDIA_ITEMS, stored);
+          stored = data.map(
+            (m: any): AdminMediaItem => ({
+              id: m.id,
+              name: m.name || undefined,
+              fileName:
+                m.file_name || undefined,
+              url: m.url,
+              sizeBytes:
+                m.size_bytes ?? undefined,
+              size: m.size || undefined,
+              dimensions:
+                m.dimensions || undefined,
+              mimeType:
+                m.mime_type || undefined,
+              uploadedAt:
+                m.uploaded_at ||
+                m.created_at,
+              usedIn:
+                Array.isArray(m.used_in)
+                  ? m.used_in
+                  : [],
+            })
+          );
         }
       }
     } catch (error) {
-      console.error('❌ Supabase media library error:', error);
+      console.error(
+        '❌ Supabase media library error:',
+        error
+      );
     }
   }
 
-  // 2. If Supabase didn't return anything, use localStorage
-  if (stored.length === 0) {
+  // 2. Supabase is the source of truth
+  if (supabase) {
+    saveToStorage(
+      STORAGE_KEYS.MEDIA_ITEMS,
+      stored
+    );
+  } else {
     stored = loadFromStorage<AdminMediaItem[]>(
       STORAGE_KEYS.MEDIA_ITEMS,
       demoMediaItems
     );
   }
 
-  // 3. Discover photos from memories and places
-  const mems = await this.getMemories();
-  const places = await this.getPlaces();
-
-  const existingUrls = new Set(
-    stored.map((m) => m.url)
-  );
-
-  const discovered: AdminMediaItem[] = [];
-
-  // Memories
-  mems.forEach((m) => {
-    m.photos?.forEach((url, i) => {
-      if (url && !existingUrls.has(url)) {
-        existingUrls.add(url);
-
-        const safeTitle = (m.title || 'memory')
-          .slice(0, 20)
-          .replace(/\s+/g, '-')
-          .toLowerCase();
-
-        discovered.push({
-          id: `med-disc-${Date.now()}-${i}-${Math.random()
-            .toString(36)
-            .slice(2, 5)}`,
-          name: `${safeTitle}-${i + 1}.jpg`,
-          fileName: `${safeTitle}-${i + 1}.jpg`,
-          url,
-          sizeBytes: 450000,
-          size: '450 KB',
-          mimeType: 'image/jpeg',
-          uploadedAt:
-            m.createdAt || new Date().toISOString(),
-          usedIn: [m.title || 'Memory'],
-        });
-      }
-    });
-  });
-
-  // Places
-  places.forEach((p) => {
-    if (p.coverImage && !existingUrls.has(p.coverImage)) {
-      existingUrls.add(p.coverImage);
-
-      const safePlace = (p.name || 'place')
-        .slice(0, 20)
-        .replace(/\s+/g, '-')
-        .toLowerCase();
-
-      discovered.push({
-        id: `med-place-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 5)}`,
-        name: `${safePlace}-cover.jpg`,
-        fileName: `${safePlace}-cover.jpg`,
-        url: p.coverImage,
-        sizeBytes: 520000,
-        size: '520 KB',
-        mimeType: 'image/jpeg',
-        uploadedAt:
-          p.createdAt || new Date().toISOString(),
-        usedIn: [p.name || 'Place'],
-      });
-    }
-  });
-
-  // 4. Merge everything
-  const merged = [...stored, ...discovered];
-
-  // 5. Remove duplicate URLs
+  // 3. Remove duplicate URLs
   const unique = Array.from(
     new Map(
-      merged.map((item) => [item.url, item])
+      stored.map((item) => [
+        item.url,
+        item,
+      ])
     ).values()
   );
 
+  // 4. Keep localStorage synchronized
   saveToStorage(
     STORAGE_KEYS.MEDIA_ITEMS,
     unique
   );
 
   return unique;
-  }
+}
 
   async saveMediaItem(item: AdminMediaItem): Promise<void> {
   const list = await this.getMediaLibrary();
