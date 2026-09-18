@@ -513,50 +513,67 @@ export async function syncMemoryPhotosToDatabase(
   memoryId: string,
   photoUrls: string[]
 ): Promise<void> {
-  const supabase =
-    getSupabaseClient();
+  const supabase = getSupabaseClient();
 
-  if (!supabase) return;
+  if (!supabase) {
+    console.warn('Supabase client unavailable while syncing memory photos.');
+    return;
+  }
 
   try {
-    // Delete existing records for this memory
-    // to prevent duplicates and keep order synchronized.
-    await supabase
+    // Remove old photo records for this memory
+    const { error: deleteError } = await supabase
       .from('memory_photos')
       .delete()
-      .eq(
-        'memory_id',
-        memoryId
+      .eq('memory_id', memoryId);
+
+    if (deleteError) {
+      console.error(
+        'Failed to delete old memory photos:',
+        deleteError.message
       );
-
-    if (photoUrls.length > 0) {
-      const records =
-        photoUrls.map(
-          (url, index) => ({
-            memory_id: memoryId,
-            photo_url: url,
-            sort_order: index,
-          })
-        );
-
-      const {
-        error,
-      } =
-        await supabase
-          .from('memory_photos')
-          .insert(records);
-
-      if (error) {
-        console.warn(
-          'Notice syncing memory_photos database table:',
-          error.message
-        );
-      }
+      return;
     }
+
+    // Remove empty/invalid URLs
+    const validPhotoUrls = photoUrls.filter(
+      (url) =>
+        typeof url === 'string' &&
+        url.trim().length > 0
+    );
+
+    if (validPhotoUrls.length === 0) {
+      return;
+    }
+
+    // Insert the current photo list
+    const records = validPhotoUrls.map(
+      (url, index) => ({
+        memory_id: memoryId,
+        photo_url: url,
+        sort_order: index,
+      })
+    );
+
+    const { error: insertError } = await supabase
+      .from('memory_photos')
+      .insert(records);
+
+    if (insertError) {
+      console.error(
+        'Failed to save memory photos:',
+        insertError.message
+      );
+      return;
+    }
+
+    console.log(
+      `Successfully saved ${records.length} photo(s) for memory ${memoryId}.`
+    );
   } catch (err) {
-    console.warn(
-      'Notice syncing memory_photos database records:',
+    console.error(
+      'Memory photo database sync failed:',
       err
     );
   }
-        }
+}
