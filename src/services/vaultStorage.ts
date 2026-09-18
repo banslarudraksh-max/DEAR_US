@@ -259,58 +259,118 @@ class VaultStorageService {
     }
 
   async saveMemory(memory: Memory): Promise<Memory> {
-    const memories = await this.getMemories();
-    const existingIndex = memories.findIndex((m) => m.id === memory.id);
-    let updatedMemories: Memory[];
+  const memories = await this.getMemories();
 
-    if (existingIndex >= 0) {
-      updatedMemories = [...memories];
-      updatedMemories[existingIndex] = { ...memory, updatedAt: new Date().toISOString() };
-    } else {
-      updatedMemories = [memory, ...memories];
-    }
+  const existingIndex = memories.findIndex(
+    (m) => m.id === memory.id
+  );
 
-    saveToStorage(STORAGE_KEYS.MEMORIES, updatedMemories);
+  let updatedMemories: Memory[];
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('memories').upsert({
-          id: memory.id,
-          user_id: memory.userId,
-          creator_name: memory.creatorName,
-          title: memory.title,
-          date: memory.date,
-          description: memory.description,
-          photos: memory.photos,
-          location: memory.location,
-          latitude: memory.latitude,
-          longitude: memory.longitude,
-          mood: memory.mood,
-          category: memory.category,
-          tags: memory.tags,
-          is_favorite: memory.isFavorite,
-          is_private: memory.isPrivate,
-          voice_note_url: memory.voiceNoteUrl,
-          voice_note_duration: memory.voiceNoteDuration,
-          song_title: memory.songTitle,
-          song_url: memory.songUrl,
-          reactions: memory.reactions,
-          updated_at: new Date().toISOString(),
-        });
+  if (existingIndex >= 0) {
+    updatedMemories = [...memories];
 
-        // Keep public.memory_photos synchronized with the memory photos array
-        if (memory.photos && Array.isArray(memory.photos)) {
-          await syncMemoryPhotosToDatabase(memory.id, memory.photos);
-        }
-      } catch (err) {
-        console.warn('Supabase memory save error:', err);
-      }
-    }
-
-    return memory;
+    updatedMemories[existingIndex] = {
+      ...memory,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    updatedMemories = [
+      memory,
+      ...memories,
+    ];
   }
 
+  // Always keep local cache updated
+  saveToStorage(
+    STORAGE_KEYS.MEMORIES,
+    updatedMemories
+  );
+
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { error: memoryError } =
+        await supabase
+          .from('memories')
+          .upsert(
+            {
+              id: memory.id,
+              user_id: memory.userId,
+              creator_name: memory.creatorName,
+              title: memory.title,
+              date: memory.date,
+              description: memory.description,
+              photos: Array.isArray(memory.photos)
+                ? memory.photos
+                : [],
+              location: memory.location,
+              latitude: memory.latitude,
+              longitude: memory.longitude,
+              mood: memory.mood,
+              category: memory.category,
+              tags: memory.tags || [],
+              is_favorite: memory.isFavorite,
+              is_private: memory.isPrivate,
+              voice_note_url: memory.voiceNoteUrl,
+              voice_note_duration:
+                memory.voiceNoteDuration,
+              song_title: memory.songTitle,
+              song_url: memory.songUrl,
+              reactions: memory.reactions || [],
+              updated_at:
+                new Date().toISOString(),
+            },
+            {
+              onConflict: 'id',
+            }
+          );
+
+      if (memoryError) {
+        console.error(
+          '❌ Memory database save failed:',
+          memoryError.message
+        );
+
+        throw new Error(
+          `Memory database save failed: ${memoryError.message}`
+        );
+      }
+
+      console.log(
+        '✅ Memory saved to Supabase:',
+        memory.id
+      );
+
+      // Sync photos only after memory itself
+      // has successfully been saved.
+      if (
+        Array.isArray(memory.photos)
+      ) {
+        await syncMemoryPhotosToDatabase(
+          memory.id,
+          memory.photos
+        );
+
+        console.log(
+          '✅ Memory photos synchronized:',
+          memory.photos.length
+        );
+      }
+    } catch (err) {
+      console.error(
+        '❌ Supabase memory save error:',
+        err
+      );
+
+      // Local cache is still available,
+      // but don't silently pretend Supabase saved it.
+    }
+  }
+
+  return memory;
+  }
   async deleteMemory(id: string): Promise<void> {
     const memories = await this.getMemories();
     const filtered = memories.filter((m) => m.id !== id);
