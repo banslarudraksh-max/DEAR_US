@@ -239,7 +239,7 @@ return {
 };
     }
   }
-
+  
   // Offline / local storage fallback
   onProgress?.(100);
   return {
