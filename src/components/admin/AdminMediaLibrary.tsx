@@ -60,6 +60,7 @@ export const AdminMediaLibrary: React.FC<AdminMediaLibraryProps> = ({
 
     // Existing media library items
     // Existing media library items
+// Existing media library items
 mediaList.forEach((media) => {
   if (media.url) {
     map.set(media.url, {
