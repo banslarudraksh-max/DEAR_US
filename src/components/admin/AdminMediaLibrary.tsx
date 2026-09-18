@@ -137,10 +137,46 @@ export const AdminMediaLibrary: React.FC<AdminMediaLibraryProps> = ({
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
+  try {
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Please select an image file.');
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      throw new Error('Image must be 20MB or smaller.');
+    }
+
+    // Show selected file name
+    setNewMediaName(
+      file.name.replace(/\.[^/.]+$/, '')
+    );
+
+    // Upload directly to Supabase Storage
+    const uploadedUrl = await vaultStorage.uploadFile(
+      file,
+      'vault-photos'
+    );
+
+    // Use uploaded public URL for preview
+    setNewMediaUrl(uploadedUrl);
+
+    console.log('✅ Image uploaded:', uploadedUrl);
+  } catch (error) {
+    console.error('❌ Media upload failed:', error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'Failed to upload image.'
+    );
+  }
+};
     setNewMediaName(file.name.replace(/\.[^/.]+$/, ''));
     const reader = new FileReader();
     reader.onload = () => {
