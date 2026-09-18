@@ -78,7 +78,7 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
    * Allow zooming out below 100%.
    * This is the main fix for the "only face is visible" problem.
    */
-  const MIN_ZOOM = 0.5;
+  const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 3;
 
   useEffect(() => {
