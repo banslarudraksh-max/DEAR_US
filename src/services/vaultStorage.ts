@@ -836,37 +836,60 @@ class VaultStorageService {
 
   // Capsules
   async getCapsules(): Promise<MemoryCapsule[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('capsules').select('*').order('unlock_date', { ascending: true });
-        if (!error && data && data.length > 0) {
-          const mapped: MemoryCapsule[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            theme: d.theme,
-            createdDate: d.created_date,
-            unlockDate: d.unlock_date,
-            creatorName: d.creator_name,
-            creatorId: d.creator_id,
-            photos: d.photos || [],
-            message: d.message,
-            notes: d.notes || [],
-            links: d.links || [],
-            voiceNoteUrl: d.voice_note_url || d.song_url,
-            songTitle: d.song_title,
-            songUrl: d.song_url || d.voice_note_url,
-            isUnlocked: d.is_unlocked,
-            createdAt: d.created_at,
-          }));
-          saveToStorage(STORAGE_KEYS.CAPSULES, mapped);
-          return mapped;
-        }
-      } catch (e) {
-        console.warn('Supabase capsules error:', e);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('memory_capsules')
+        .select('*')
+        .order('unlock_date', { ascending: true });
+
+      if (error) {
+        console.error('Supabase capsules fetch error:', error);
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: MemoryCapsule[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          theme: d.theme,
+          description: d.description,
+          coverImage: d.cover_image,
+          createdDate: d.created_date,
+          unlockDate: d.unlock_date,
+          creatorName: d.creator_name,
+          creatorId: d.creator_id,
+
+          photos: d.photos || [],
+          message: d.message || '',
+          notes: d.notes || [],
+          links: d.links || {},
+
+          voiceNoteUrl: d.voice_note_url || null,
+
+          isUnlocked: d.is_unlocked ?? false,
+          isSealed: d.is_sealed ?? false,
+
+          mediaCount: d.media_count || 0,
+          notesCount: d.notes_count || 0,
+
+          createdAt: d.created_at,
+        }));
+
+        saveToStorage(STORAGE_KEYS.CAPSULES, mapped);
+
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Supabase capsules error:', e);
     }
-    return loadFromStorage<MemoryCapsule[]>(STORAGE_KEYS.CAPSULES, demoCapsules);
+  }
+
+  return loadFromStorage<MemoryCapsule[]>(
+    STORAGE_KEYS.CAPSULES,
+    demoCapsules
+  );
   }
 
   async saveCapsule(capsule: MemoryCapsule): Promise<MemoryCapsule> {
