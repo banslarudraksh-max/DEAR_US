@@ -447,56 +447,94 @@ class VaultStorageService {
     );
   }
 
-  // Local fallback/cache
+  // Local cache
   saveToStorage(STORAGE_KEYS.TIMELINE, updated);
 
   const supabase = getSupabaseClient();
 
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('timeline_events')
-        .upsert(
-          {
-            id: event.id,
-            user_id: event.userId || null,
-            title: event.title,
-            date: event.date,
-            description: event.description || '',
-            photo_url: event.photoUrl || null,
-            photos: event.photos || [],
-            location: event.location || null,
-            category: event.category || 'Special',
-            tags: event.tags || [],
-            voice_note_url: event.voiceNoteUrl || null,
-            is_milestone: event.isMilestone ?? false,
-          },
-          {
-            onConflict: 'id',
-          }
-        );
-
-      if (error) {
-        console.error(
-          'Supabase timeline save error:',
-          error.message,
-          error
-        );
-      } else {
-        console.log(
-          'Timeline event saved to Supabase:',
-          event.id
-        );
-      }
-    } catch (e) {
-      console.error(
-        'Supabase timeline save exception:',
-        e
-      );
-    }
+  if (!supabase) {
+    console.warn(
+      'Supabase client not available. Timeline saved locally only.'
+    );
+    return event;
   }
 
-  return event;
+  try {
+    // Get authenticated Supabase user
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error(
+        'Could not get authenticated user:',
+        authError
+      );
+      return event;
+    }
+
+    if (!user?.id) {
+      console.error(
+        'Timeline save failed: No authenticated user found.'
+      );
+      return event;
+    }
+
+    const timelineRow = {
+      id: event.id,
+      user_id: user.id,
+      title: event.title,
+      date: event.date,
+      description: event.description || '',
+      photo_url: event.photoUrl || null,
+      photos: event.photos || [],
+      location: event.location || null,
+      category: event.category || 'Special',
+      tags: event.tags || [],
+      voice_note_url: event.voiceNoteUrl || null,
+      is_milestone: event.isMilestone ?? false,
+    };
+
+    console.log(
+      'Saving timeline event:',
+      timelineRow
+    );
+
+    const { data, error } = await supabase
+      .from('timeline_events')
+      .upsert(timelineRow, {
+        onConflict: 'id',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(
+        'Supabase timeline save error:',
+        error.message,
+        error.details,
+        error.hint,
+        error.code
+      );
+
+      return event;
+    }
+
+    console.log(
+      'Timeline event successfully saved:',
+      data
+    );
+
+    return event;
+  } catch (error) {
+    console.error(
+      'Supabase timeline save exception:',
+      error
+    );
+
+    return event;
+  }
   }
 
   async deleteTimelineEvent(id: string): Promise<void> {
