@@ -823,41 +823,82 @@ class VaultStorageService {
   }
 
   async saveCapsule(capsule: MemoryCapsule): Promise<MemoryCapsule> {
-    const capsules = await this.getCapsules();
-    const idx = capsules.findIndex((c) => c.id === capsule.id);
-    let updated: MemoryCapsule[];
-    if (idx >= 0) {
-      updated = [...capsules];
-      updated[idx] = capsule;
-    } else {
-      updated = [capsule, ...capsules];
-    }
-    saveToStorage(STORAGE_KEYS.CAPSULES, updated);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('capsules').upsert({
-          id: capsule.id,
-          creator_id: capsule.creatorId,
-          creator_name: capsule.creatorName,
-          title: capsule.title,
-          theme: capsule.theme,
-          created_date: capsule.createdDate,
-          unlock_date: capsule.unlockDate,
-          photos: capsule.photos,
-          message: capsule.message,
-          notes: capsule.notes,
-          links: capsule.links,
-          voice_note_url: capsule.voiceNoteUrl || capsule.songUrl,
-          song_title: capsule.songTitle,
-          song_url: capsule.songUrl,
-          is_unlocked: capsule.isUnlocked,
-        });
-      } catch (e) {
-        console.warn('Supabase capsule save error:', e);
+  const capsules = await this.getCapsules();
+
+  const idx = capsules.findIndex((c) => c.id === capsule.id);
+
+  let updated: MemoryCapsule[];
+
+  if (idx >= 0) {
+    updated = [...capsules];
+    updated[idx] = capsule;
+  } else {
+    updated = [capsule, ...capsules];
+  }
+
+  saveToStorage(STORAGE_KEYS.CAPSULES, updated);
+
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        console.warn(
+          'No authenticated user for capsule save:',
+          userError
+        );
+      } else {
+        const user = userData.user;
+
+        const { data, error } = await supabase
+          .from('memory_capsules')
+          .upsert({
+            id: capsule.id,
+            creator_id: user.id,
+            creator_name: capsule.creatorName || user.id,
+            title: capsule.title,
+            theme: capsule.theme,
+            description: capsule.description || null,
+            cover_image: capsule.coverImage || null,
+            message: capsule.message || null,
+            photos: capsule.photos || [],
+            notes: capsule.notes || [],
+            links: capsule.links || {},
+            voice_note_url: capsule.voiceNoteUrl || null,
+            is_unlocked: capsule.isUnlocked ?? false,
+            is_sealed: capsule.isSealed ?? false,
+            created_date: capsule.createdDate,
+            unlock_date: capsule.unlockDate,
+            media_count: capsule.photos?.length || 0,
+            notes_count: capsule.notes?.length || 0,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error(
+            'Supabase capsule save error:',
+            error
+          );
+        } else {
+          console.log(
+            'Memory capsule saved successfully:',
+            data
+          );
+        }
       }
+    } catch (error) {
+      console.error(
+        'Supabase capsule save exception:',
+        error
+      );
     }
-    return capsule;
+  }
+
+  return capsule;
   }
 
   async deleteCapsule(id: string): Promise<void> {
