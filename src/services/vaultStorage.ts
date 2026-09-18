@@ -1188,60 +1188,141 @@ async getBucketList(): Promise<BucketListItem[]> {
 
   // Countdowns
   async getCountdowns(): Promise<CountdownEvent[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('countdowns').select('*').order('target_date', { ascending: true });
-        if (!error && data && data.length > 0) {
-          const mapped: CountdownEvent[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            targetDate: d.target_date,
-            category: d.category,
-            isRecurringYearly: d.is_recurring_yearly,
-            notes: d.notes,
-            coverImage: d.cover_image,
-            createdAt: d.created_at,
-          }));
-          saveToStorage(STORAGE_KEYS.COUNTDOWNS, mapped);
-          return mapped;
-        }
-      } catch (e) {
-        console.warn('Supabase countdowns error:', e);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('countdowns')
+        .select('*')
+        .order('target_date', { ascending: true });
+
+      if (error) {
+        console.error(
+          '❌ Supabase countdowns fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: CountdownEvent[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          targetDate: d.target_date,
+          category: d.category || '',
+          isRecurringYearly:
+            d.is_recurring_yearly ?? false,
+          notes: d.notes || '',
+          coverImage: d.cover_image || null,
+          createdAt: d.created_at,
+        }));
+
+        saveToStorage(
+          STORAGE_KEYS.COUNTDOWNS,
+          mapped
+        );
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        '❌ Supabase countdowns error:',
+        error
+      );
     }
-    return loadFromStorage<CountdownEvent[]>(STORAGE_KEYS.COUNTDOWNS, demoCountdowns);
+  }
+
+  return loadFromStorage<CountdownEvent[]>(
+    STORAGE_KEYS.COUNTDOWNS,
+    demoCountdowns
+  );
   }
 
   async saveCountdown(countdown: CountdownEvent): Promise<CountdownEvent> {
-    const list = await this.getCountdowns();
-    const idx = list.findIndex((c) => c.id === countdown.id);
-    let updated: CountdownEvent[];
-    if (idx >= 0) {
-      updated = [...list];
-      updated[idx] = countdown;
-    } else {
-      updated = [...list, countdown].sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime());
-    }
-    saveToStorage(STORAGE_KEYS.COUNTDOWNS, updated);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('countdowns').upsert({
+  const list = await this.getCountdowns();
+
+  const idx = list.findIndex((c) => c.id === countdown.id);
+
+  let updated: CountdownEvent[];
+
+  if (idx >= 0) {
+    updated = [...list];
+    updated[idx] = countdown;
+  } else {
+    updated = [...list, countdown].sort(
+      (a, b) =>
+        new Date(a.targetDate).getTime() -
+        new Date(b.targetDate).getTime()
+    );
+  }
+
+  // Save locally
+  saveToStorage(STORAGE_KEYS.COUNTDOWNS, updated);
+
+  // Save to Supabase
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        console.error(
+          '❌ No authenticated user for countdown save:',
+          userError
+        );
+      } else {
+        const user = userData.user;
+
+        const countdownData = {
           id: countdown.id,
-          user_id: 'partner-1',
+          user_id: user.id,
+
           title: countdown.title,
           target_date: countdown.targetDate,
-          category: countdown.category,
-          is_recurring_yearly: countdown.isRecurringYearly,
-          notes: countdown.notes,
-          cover_image: countdown.coverImage,
-        });
-      } catch (e) {
-        console.warn('Supabase countdown save error:', e);
+          category: countdown.category || null,
+          is_recurring_yearly:
+            countdown.isRecurringYearly ?? false,
+          notes: countdown.notes || null,
+          cover_image: countdown.coverImage || null,
+        };
+
+        const { data, error } = await supabase
+          .from('countdowns')
+          .upsert(countdownData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(
+            '❌ COUNTDOWN SAVE ERROR:',
+            error
+          );
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Error hint:', error.hint);
+          console.error('Error code:', error.code);
+          console.error(
+            'Data being saved:',
+            countdownData
+          );
+        } else {
+          console.log(
+            '✅ COUNTDOWN SAVED SUCCESSFULLY:',
+            data
+          );
+        }
       }
+    } catch (error) {
+      console.error(
+        '❌ Supabase countdown save exception:',
+        error
+      );
     }
-    return countdown;
+  }
+
+  return countdown;
   }
 
   async deleteCountdown(id: string): Promise<void> {
