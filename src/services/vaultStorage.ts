@@ -1553,26 +1553,47 @@ if (!uploadError) {
 
   // Categories & Moods
   async getCategories(): Promise<CategoryItem[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('categories')
-          .select('*')
-          .order('name', { ascending: true });
-        if (!error && data && data.length > 0) {
-          return data.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            color: c.color || '#DFBF99',
-            description: c.description,
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase categories fetch error, using local fallback:', err);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error(
+          '❌ Supabase categories fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: CategoryItem[] = data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          color: c.color || '#DFBF99',
+          description: c.description || '',
+        }));
+
+        // Keep local storage updated
+        await this.saveCategories(mapped);
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        '❌ Supabase categories error:',
+        error
+      );
     }
-    return loadFromStorage(STORAGE_KEYS.CATEGORIES, defaultCategories);
+  }
+
+  return loadFromStorage<CategoryItem[]>(
+    STORAGE_KEYS.CATEGORIES,
+    defaultCategories
+  );
   }
 
   async saveCategories(cats: CategoryItem[]): Promise<void> {
@@ -1580,30 +1601,66 @@ if (!uploadError) {
   }
 
   async saveCategory(cat: CategoryItem): Promise<void> {
-    const list = await this.getCategories();
-    const idx = list.findIndex((c) => c.id === cat.id);
-    let updated: CategoryItem[];
-    if (idx >= 0) {
-      updated = [...list];
-      updated[idx] = cat;
-    } else {
-      updated = [...list, cat];
-    }
-    await this.saveCategories(updated);
+  const list = await this.getCategories();
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('categories').upsert({
-          id: cat.id,
-          name: cat.name,
-          color: cat.color,
-          description: cat.description,
-        });
-      } catch (err) {
-        console.warn('Supabase save category error:', err);
+  const idx = list.findIndex((c) => c.id === cat.id);
+
+  let updated: CategoryItem[];
+
+  if (idx >= 0) {
+    updated = [...list];
+    updated[idx] = cat;
+  } else {
+    updated = [...list, cat];
+  }
+
+  // Save locally
+  await this.saveCategories(updated);
+
+  // Save to Supabase
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const categoryData = {
+        id: cat.id,
+        name: cat.name,
+        color: cat.color,
+        description: cat.description || null,
+      };
+
+      const { data, error } = await supabase
+        .from('categories')
+        .upsert(categoryData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(
+          '❌ CATEGORY SAVE ERROR:',
+          error
+        );
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Error code:', error.code);
+        console.error(
+          'Data being saved:',
+          categoryData
+        );
+      } else {
+        console.log(
+          '✅ CATEGORY SAVED SUCCESSFULLY:',
+          data
+        );
       }
+    } catch (error) {
+      console.error(
+        '❌ Supabase category save exception:',
+        error
+      );
     }
+  }
   }
 
   async deleteCategory(id: string, reassignToId?: string): Promise<void> {
