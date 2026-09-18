@@ -1691,61 +1691,113 @@ if (!uploadError) {
   }
 
   async getMoods(): Promise<MoodItem[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('moods')
-          .select('*')
-          .order('name', { ascending: true });
-        if (!error && data && data.length > 0) {
-          return data.map((m: any) => ({
-            id: m.id,
-            name: m.name,
-            emoji: m.emoji,
-            color: m.color || '#C25D7C',
-            description: m.description,
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase moods fetch error, using local fallback:', err);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('moods')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error(
+          '❌ Supabase moods fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: MoodItem[] = data.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          emoji: m.emoji,
+          color: m.color || '#C25D7C',
+          description: m.description || '',
+        }));
+
+        // Keep local storage updated
+        await this.saveMoods(mapped);
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        '❌ Supabase moods error:',
+        error
+      );
     }
-    return loadFromStorage(STORAGE_KEYS.MOODS, defaultMoods);
   }
 
+  return loadFromStorage<MoodItem[]>(
+    STORAGE_KEYS.MOODS,
+    defaultMoods
+  );
+  }
   async saveMoods(moods: MoodItem[]): Promise<void> {
     saveToStorage(STORAGE_KEYS.MOODS, moods);
   }
 
   async saveMood(mood: MoodItem): Promise<void> {
-    const list = await this.getMoods();
-    const idx = list.findIndex((m) => m.id === mood.id);
-    let updated: MoodItem[];
-    if (idx >= 0) {
-      updated = [...list];
-      updated[idx] = mood;
-    } else {
-      updated = [...list, mood];
-    }
-    await this.saveMoods(updated);
+  const list = await this.getMoods();
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('moods').upsert({
-          id: mood.id,
-          name: mood.name,
-          emoji: mood.emoji,
-          color: mood.color,
-          description: mood.description,
-        });
-      } catch (err) {
-        console.warn('Supabase save mood error:', err);
-      }
-    }
+  const idx = list.findIndex((m) => m.id === mood.id);
+
+  let updated: MoodItem[];
+
+  if (idx >= 0) {
+    updated = [...list];
+    updated[idx] = mood;
+  } else {
+    updated = [...list, mood];
   }
 
+  // Save locally
+  await this.saveMoods(updated);
+
+  // Save to Supabase
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const moodData = {
+        id: mood.id,
+        name: mood.name,
+        emoji: mood.emoji,
+        color: mood.color,
+        description: mood.description || null,
+      };
+
+      const { data, error } = await supabase
+        .from('moods')
+        .upsert(moodData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(
+          '❌ MOOD SAVE ERROR:',
+          error
+        );
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Error code:', error.code);
+        console.error('Data being saved:', moodData);
+      } else {
+        console.log(
+          '✅ MOOD SAVED SUCCESSFULLY:',
+          data
+        );
+      }
+    } catch (error) {
+      console.error(
+        '❌ Supabase mood save exception:',
+        error
+      );
+    }
+  }
+  }
   async deleteMood(id: string, reassignToId?: string): Promise<void> {
     const list = await this.getMoods();
     const target = list.find((m) => m.id === id);
