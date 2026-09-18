@@ -98,26 +98,94 @@ class VaultStorageService {
   }
 
   async saveProfile(profile: UserProfile): Promise<void> {
-    saveToStorage(STORAGE_KEYS.PROFILE, profile);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('profiles').upsert({
-          id: profile.id,
+  // 1. Save locally as well
+  saveToStorage(STORAGE_KEYS.PROFILE, profile);
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    return;
+  }
+
+  try {
+    // 2. Get the currently logged-in Supabase user
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser();
+
+    if (userError || !userData.user) {
+      throw new Error(
+        'No authenticated Supabase user found.'
+      );
+    }
+
+    const userId = userData.user.id;
+
+    // 3. Save profile to Supabase
+    const { error } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: userId,
           email: profile.email,
           name: profile.name,
           partner_name: profile.partnerName,
-          relationship_start_date: profile.relationshipStartDate,
-          avatar_url: profile.avatarUrl,
-          partner_avatar_url: profile.partnerAvatarUrl,
-          anniversary_title: profile.anniversaryTitle,
-          custom_quote: profile.customQuote,
+          role: profile.role || 'user',
+
+          relationship_start_date:
+            profile.relationshipStartDate || null,
+
+          anniversary_date:
+            profile.anniversaryDate || null,
+
+          meeting_date:
+            profile.meetingDate || null,
+
+          avatar_url:
+            profile.avatarUrl || null,
+
+          partner_avatar_url:
+            profile.partnerAvatarUrl || null,
+
+          anniversary_title:
+            profile.anniversaryTitle || null,
+
+          custom_quote:
+            profile.customQuote || null,
+
+          // Keep existing passcode hash untouched here.
+          // Do not store the raw PIN in this text field.
           updated_at: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.warn('Supabase profile save error:', err);
-      }
+        },
+        {
+          onConflict: 'id',
+        }
+      );
+
+    if (error) {
+      console.error(
+        '❌ SUPABASE PROFILE SAVE ERROR:',
+        error
+      );
+      throw error;
     }
+
+    console.log(
+      '✅ PROFILE SAVED SUCCESSFULLY',
+      {
+        name: profile.name,
+        partnerName: profile.partnerName,
+        anniversaryDate: profile.anniversaryDate,
+        meetingDate: profile.meetingDate,
+      }
+    );
+  } catch (err) {
+    console.error(
+      '❌ Supabase profile save failed:',
+      err
+    );
+
+    throw err;
+  }
   }
 
   // Memories
