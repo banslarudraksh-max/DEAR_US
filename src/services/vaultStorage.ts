@@ -1040,65 +1040,136 @@ class VaultStorageService {
   }
 
   // Bucket list
-  async getBucketList(): Promise<BucketListItem[]> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('bucket_list').select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) {
-          const mapped: BucketListItem[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            description: d.description,
-            targetDate: d.target_date,
-            category: d.category,
-            isCompleted: d.is_completed,
-            completedDate: d.completed_date,
-            completedPhoto: d.completed_photo,
-            addedBy: d.added_by,
-            createdAt: d.created_at,
-          }));
-          saveToStorage(STORAGE_KEYS.BUCKET_LIST, mapped);
-          return mapped;
-        }
-      } catch (e) {
-        console.warn('Supabase bucket list error:', e);
+  // Bucket list
+async getBucketList(): Promise<BucketListItem[]> {
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('bucket_list')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error(
+          '❌ Supabase bucket list fetch error:',
+          error
+        );
       }
+
+      if (!error && data && data.length > 0) {
+        const mapped: BucketListItem[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          description: d.description || '',
+          targetDate: d.target_date,
+          category: d.category || '',
+          isCompleted: d.is_completed ?? false,
+          completedDate: d.completed_date,
+          completedPhoto: d.completed_photo,
+          addedBy: d.added_by,
+          createdAt: d.created_at,
+        }));
+
+        saveToStorage(
+          STORAGE_KEYS.BUCKET_LIST,
+          mapped
+        );
+
+        return mapped;
+      }
+    } catch (error) {
+      console.error(
+        '❌ Supabase bucket list error:',
+        error
+      );
     }
-    return loadFromStorage<BucketListItem[]>(STORAGE_KEYS.BUCKET_LIST, demoBucketList);
   }
 
+  return loadFromStorage<BucketListItem[]>(
+    STORAGE_KEYS.BUCKET_LIST,
+    demoBucketList
+  );
+}
+
   async saveBucketItem(item: BucketListItem): Promise<BucketListItem> {
-    const items = await this.getBucketList();
-    const idx = items.findIndex((i) => i.id === item.id);
-    let updated: BucketListItem[];
-    if (idx >= 0) {
-      updated = [...items];
-      updated[idx] = item;
-    } else {
-      updated = [item, ...items];
-    }
-    saveToStorage(STORAGE_KEYS.BUCKET_LIST, updated);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('bucket_list').upsert({
+  const items = await this.getBucketList();
+
+  const idx = items.findIndex((i) => i.id === item.id);
+
+  let updated: BucketListItem[];
+
+  if (idx >= 0) {
+    updated = [...items];
+    updated[idx] = item;
+  } else {
+    updated = [item, ...items];
+  }
+
+  // Save locally
+  saveToStorage(STORAGE_KEYS.BUCKET_LIST, updated);
+
+  // Save to Supabase
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        console.error(
+          '❌ No authenticated user for bucket item save:',
+          userError
+        );
+      } else {
+        const user = userData.user;
+
+        const bucketData = {
           id: item.id,
-          user_id: 'partner-1',
+          user_id: user.id,
+
           added_by: item.addedBy,
           title: item.title,
-          description: item.description,
-          target_date: item.targetDate,
-          category: item.category,
-          is_completed: item.isCompleted,
-          completed_date: item.completedDate,
-          completed_photo: item.completedPhoto,
-        });
-      } catch (e) {
-        console.warn('Supabase bucket save error:', e);
+          description: item.description || null,
+          target_date: item.targetDate || null,
+          category: item.category || null,
+
+          is_completed: item.isCompleted ?? false,
+          completed_date: item.completedDate || null,
+          completed_photo: item.completedPhoto || null,
+        };
+
+        const { data, error } = await supabase
+          .from('bucket_list')
+          .upsert(bucketData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('❌ BUCKET LIST SAVE ERROR:', error);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Error hint:', error.hint);
+          console.error('Error code:', error.code);
+          console.error('Data being saved:', bucketData);
+        } else {
+          console.log(
+            '✅ BUCKET ITEM SAVED SUCCESSFULLY:',
+            data
+          );
+        }
       }
+    } catch (error) {
+      console.error(
+        '❌ Supabase bucket save exception:',
+        error
+      );
     }
-    return item;
+  }
+
+  return item;
   }
 
   async deleteBucketItem(id: string): Promise<void> {
