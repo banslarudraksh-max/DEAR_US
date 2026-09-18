@@ -43,7 +43,6 @@ interface ImageCropModalProps {
   onCancel: () => void;
   onConfirm: (croppedFile: File, previewUrl: string) => void;
 }
-
 const ImageCropModal: React.FC<ImageCropModalProps> = ({
   file,
   onCancel,
@@ -59,6 +58,7 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
   const [isDragging, setIsDragging] = useState(false);
+
   const dragStartRef = useRef({
     x: 0,
     y: 0,
@@ -66,12 +66,28 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
     positionY: 0,
   });
 
-  const CROP_WIDTH = 320;
-  const CROP_HEIGHT = 320;
+  /*
+   * 4:3 crop area.
+   * This gives considerably more vertical space than the old
+   * 320 x 320 square crop.
+   */
+  const CROP_WIDTH = 360;
+  const CROP_HEIGHT = 270;
+
+  /*
+   * Allow zooming out below 100%.
+   * This is the main fix for the "only face is visible" problem.
+   */
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 3;
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
+
     setImageUrl(url);
+    setImageLoaded(false);
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
 
     return () => {
       URL.revokeObjectURL(url);
@@ -140,13 +156,19 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   const handleZoomIn = () => {
     setZoom((current) =>
-      Math.min(3, Number((current + 0.1).toFixed(2)))
+      Math.min(
+        MAX_ZOOM,
+        Number((current + 0.1).toFixed(2))
+      )
     );
   };
 
   const handleZoomOut = () => {
     setZoom((current) =>
-      Math.max(1, Number((current - 0.1).toFixed(2)))
+      Math.max(
+        MIN_ZOOM,
+        Number((current - 0.1).toFixed(2))
+      )
     );
   };
 
@@ -166,11 +188,9 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
     if (!naturalWidth || !naturalHeight) {
       return;
     }
+
     /*
-     * The crop preview is square.
-     *
-     * We calculate the image's "cover" scale first so the complete
-     * crop window is always filled.
+     * Base scale makes the image cover the crop frame.
      */
     const baseScale = Math.max(
       CROP_WIDTH / naturalWidth,
@@ -186,18 +206,19 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
       naturalHeight * finalScale;
 
     /*
-     * The image is centered inside the crop area.
-     * position.x / position.y are the user's manual adjustments.
+     * Center image and apply user's drag position.
      */
     const imageLeft =
-      (CROP_WIDTH - displayedWidth) / 2 + position.x;
+      (CROP_WIDTH - displayedWidth) / 2 +
+      position.x;
 
     const imageTop =
-      (CROP_HEIGHT - displayedHeight) / 2 + position.y;
+      (CROP_HEIGHT - displayedHeight) / 2 +
+      position.y;
 
     /*
-     * Convert crop-window coordinates back into original-image
-     * coordinates.
+     * Convert crop coordinates back to
+     * original image coordinates.
      */
     const sourceX =
       (0 - imageLeft) / finalScale;
@@ -205,31 +226,51 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
     const sourceY =
       (0 - imageTop) / finalScale;
 
-    const sourceSize =
+    const sourceWidth =
       CROP_WIDTH / finalScale;
 
+    const sourceHeight =
+      CROP_HEIGHT / finalScale;
+
+    /*
+     * Keep crop area safely inside the original image.
+     */
     const safeSourceX = Math.max(
       0,
-      Math.min(naturalWidth - sourceSize, sourceX)
+      Math.min(
+        naturalWidth - sourceWidth,
+        sourceX
+      )
     );
 
     const safeSourceY = Math.max(
       0,
-      Math.min(naturalHeight - sourceSize, sourceY)
+      Math.min(
+        naturalHeight - sourceHeight,
+        sourceY
+      )
     );
 
-    const safeSourceSize = Math.min(
-      sourceSize,
-      naturalWidth - safeSourceX,
+    const safeSourceWidth = Math.min(
+      sourceWidth,
+      naturalWidth - safeSourceX
+    );
+
+    const safeSourceHeight = Math.min(
+      sourceHeight,
       naturalHeight - safeSourceY
     );
 
-    const OUTPUT_SIZE = 1200;
+    /*
+     * Keep the same 4:3 aspect ratio in output.
+     */
+    const OUTPUT_WIDTH = 1200;
+    const OUTPUT_HEIGHT = 900;
 
     const canvas = document.createElement('canvas');
 
-    canvas.width = OUTPUT_SIZE;
-    canvas.height = OUTPUT_SIZE;
+    canvas.width = OUTPUT_WIDTH;
+    canvas.height = OUTPUT_HEIGHT;
 
     const context = canvas.getContext('2d');
 
@@ -244,21 +285,23 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
       image,
       safeSourceX,
       safeSourceY,
-      safeSourceSize,
-      safeSourceSize,
+      safeSourceWidth,
+      safeSourceHeight,
       0,
       0,
-      OUTPUT_SIZE,
-      OUTPUT_SIZE
+      OUTPUT_WIDTH,
+      OUTPUT_HEIGHT
     );
 
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(
-        (result) => resolve(result),
-        'image/jpeg',
-        0.92
-      );
-    });
+    const blob = await new Promise<Blob | null>(
+      (resolve) => {
+        canvas.toBlob(
+          (result) => resolve(result),
+          'image/jpeg',
+          0.92
+        );
+      }
+    );
 
     if (!blob) {
       return;
@@ -266,7 +309,10 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
     const baseName = file.name
       .replace(/\.[^/.]+$/, '')
-      .replace(/[^a-zA-Z0-9-_]/g, '-');
+      .replace(
+        /[^a-zA-Z0-9-_]/g,
+        '-'
+      );
 
     const croppedFile = new File(
       [blob],
@@ -280,7 +326,10 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
     const previewUrl =
       URL.createObjectURL(blob);
 
-    onConfirm(croppedFile, previewUrl);
+    onConfirm(
+      croppedFile,
+      previewUrl
+    );
   };
 
   return (
@@ -298,6 +347,7 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl max-h-[95vh] overflow-y-auto rounded-3xl border border-[#DFBF99]/25 bg-[#110411] shadow-2xl">
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#DFBF99]/15">
           <div>
@@ -326,6 +376,7 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
         {/* Crop workspace */}
         <div className="px-4 pt-5">
+
           <div className="flex justify-center">
             <div
               ref={containerRef}
@@ -334,7 +385,7 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 width: CROP_WIDTH,
                 height: CROP_HEIGHT,
                 maxWidth: 'calc(100vw - 40px)',
-                maxHeight: 'calc(100vw - 40px)',
+                maxHeight: 'calc(100vw - 70px)',
               }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -346,9 +397,11 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 }
               }}
             >
-              {/* Checker/ambient background */}
+
+              {/* Background */}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#321238_0%,#0A020B_70%)]" />
 
+              {/* Image */}
               {imageUrl && (
                 <img
                   ref={imageRef}
@@ -360,31 +413,48 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
                   style={{
                     width: 'auto',
                     height: 'auto',
-                    minWidth: '100%',
-                    minHeight: '100%',
-                    transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${zoom})`,
-                    transformOrigin: 'center center',
+
+                    /*
+                     * Do NOT force min-width/min-height here.
+                     * Those were contributing to the overly
+                     * zoomed feeling.
+                     */
+                    transform: `
+                      translate(-50%, -50%)
+                      translate(${position.x}px, ${position.y}px)
+                      scale(${zoom})
+                    `,
+                    transformOrigin:
+                      'center center',
                   }}
                 />
               )}
 
               {/* Crop frame */}
               <div className="absolute inset-0 pointer-events-none">
-                {/* Outer dark overlay */}
+
+                {/* Dark outside area */}
                 <div className="absolute inset-0 ring-[999px] ring-black/45" />
 
-                {/* Corner guides */}
+                {/* Inner frame */}
                 <div className="absolute inset-3 border border-white/30 rounded-lg" />
 
+                {/* Corner guides */}
                 <div className="absolute top-3 left-3 w-7 h-7 border-l-2 border-t-2 border-[#DFBF99]" />
+
                 <div className="absolute top-3 right-3 w-7 h-7 border-r-2 border-t-2 border-[#DFBF99]" />
+
                 <div className="absolute bottom-3 left-3 w-7 h-7 border-l-2 border-b-2 border-[#DFBF99]" />
+
                 <div className="absolute bottom-3 right-3 w-7 h-7 border-r-2 border-b-2 border-[#DFBF99]" />
 
-                {/* Rule-of-thirds guides */}
+                {/* Rule of thirds */}
                 <div className="absolute left-1/3 top-3 bottom-3 w-px bg-white/15" />
+
                 <div className="absolute left-2/3 top-3 bottom-3 w-px bg-white/15" />
+
                 <div className="absolute top-1/3 left-3 right-3 h-px bg-white/15" />
+
                 <div className="absolute top-2/3 left-3 right-3 h-px bg-white/15" />
 
                 {/* Center indicator */}
@@ -392,48 +462,66 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
               </div>
 
               {/* Drag hint */}
-              {!isDragging && imageLoaded && zoom === 1 && position.x === 0 && position.y === 0 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/65 border border-white/10 backdrop-blur-sm text-[10px] text-white/80">
-                    <Move className="w-3 h-3" />
-                    <span>Drag to position</span>
+              {!isDragging &&
+                imageLoaded &&
+                zoom === 1 &&
+                position.x === 0 &&
+                position.y === 0 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/65 border border-white/10 backdrop-blur-sm text-[10px] text-white/80">
+                      <Move className="w-3 h-3" />
+                      <span>
+                        Drag to position
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
 
           {/* Zoom controls */}
           <div className="flex items-center justify-center gap-3 mt-5">
+
+            {/* Zoom out */}
             <button
               type="button"
               onClick={handleZoomOut}
-              disabled={!imageLoaded || zoom <= 1}
+              disabled={
+                !imageLoaded ||
+                zoom <= MIN_ZOOM
+              }
               className="w-11 h-11 rounded-xl border border-[#DFBF99]/25 bg-[#1C071F] text-[#DFBF99] flex items-center justify-center hover:bg-[#2A0C30] disabled:opacity-30 disabled:cursor-not-allowed transition"
               aria-label="Zoom out"
             >
               <ZoomOut className="w-5 h-5" />
             </button>
 
+            {/* Zoom percentage */}
             <div className="min-w-[110px] text-center">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#8F7D8A]">
                 Zoom
               </div>
+
               <div className="text-sm font-medium text-[#FAF7F2] mt-0.5">
                 {Math.round(zoom * 100)}%
               </div>
             </div>
 
+            {/* Zoom in */}
             <button
               type="button"
               onClick={handleZoomIn}
-              disabled={!imageLoaded || zoom >= 3}
+              disabled={
+                !imageLoaded ||
+                zoom >= MAX_ZOOM
+              }
               className="w-11 h-11 rounded-xl border border-[#DFBF99]/25 bg-[#1C071F] text-[#DFBF99] flex items-center justify-center hover:bg-[#2A0C30] disabled:opacity-30 disabled:cursor-not-allowed transition"
               aria-label="Zoom in"
             >
               <ZoomIn className="w-5 h-5" />
             </button>
 
+            {/* Reset */}
             <button
               type="button"
               onClick={handleReset}
@@ -445,17 +533,39 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
             </button>
           </div>
 
+          {/* Zoom slider */}
+          <div className="mt-4 px-2">
+            <input
+              type="range"
+              min={MIN_ZOOM}
+              max={MAX_ZOOM}
+              step={0.01}
+              value={zoom}
+              onChange={(e) =>
+                setZoom(
+                  Number(e.target.value)
+                )
+              }
+              disabled={!imageLoaded}
+              className="w-full accent-[#DFBF99] cursor-pointer disabled:opacity-30"
+              aria-label="Photo zoom"
+            />
+          </div>
+
           {/* Hint */}
           <div className="mt-4 rounded-xl border border-[#DFBF99]/10 bg-[#18061B]/70 px-3.5 py-3">
             <p className="text-[11px] leading-relaxed text-[#AFA0AA] text-center">
-              Move the photo until the face, body, or any important part is
-              inside the frame. You decide exactly which portion is saved.
+              Drag the photo to position it.
+              Use the slider or buttons to
+              zoom in or out. Everything inside
+              the frame will be saved.
             </p>
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-5 py-4 mt-2 border-t border-[#DFBF99]/15">
+
           <button
             type="button"
             onClick={onCancel}
@@ -478,7 +588,6 @@ const ImageCropModal: React.FC<ImageCropModalProps> = ({
     </div>
   );
 };
-
 /* -------------------------------------------------------------------------- */
 /*                         MEMORY IMAGE UPLOADER                              */
 /* -------------------------------------------------------------------------- */
