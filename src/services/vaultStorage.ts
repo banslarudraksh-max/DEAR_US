@@ -634,55 +634,59 @@ class VaultStorageService {
         await supabase.auth.getUser();
 
       if (userError || !userData.user) {
-        console.warn(
-          'No authenticated user for place save:',
+        console.error(
+          '❌ No authenticated user for place save:',
           userError
         );
       } else {
         const user = userData.user;
 
+        const placeData = {
+          id: place.id,
+          user_id: user.id,
+
+          name: place.name,
+          location: place.location,
+          country: place.country || null,
+
+          latitude: place.latitude ?? null,
+          longitude: place.longitude ?? null,
+
+          date: place.date || null,
+          visit_date: place.visitDate || place.date || null,
+
+          cover_image: place.coverImage || null,
+          photos: place.photos || [],
+
+          notes: place.notes || null,
+          related_memory_ids: place.relatedMemoryIds || [],
+
+          is_visited: place.isVisited ?? false,
+        };
+
         const { data, error } = await supabase
           .from('places')
-          .upsert({
-            id: place.id,
-            user_id: user.id,
-
-            name: place.name,
-            location: place.location,
-            country: place.country || null,
-
-            latitude: place.latitude ?? null,
-            longitude: place.longitude ?? null,
-
-            date: place.date || null,
-            visit_date: place.visitDate || place.date || null,
-
-            cover_image: place.coverImage || null,
-            photos: place.photos || [],
-
-            notes: place.notes || null,
-            related_memory_ids: place.relatedMemoryIds || [],
-
-            is_visited: place.isVisited ?? false,
-          })
+          .upsert(placeData)
           .select()
           .single();
 
         if (error) {
-          console.error(
-            'Supabase place save error:',
-            error
-          );
+          console.error('❌ PLACE SAVE ERROR:', error);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Error hint:', error.hint);
+          console.error('Error code:', error.code);
+          console.error('Data being saved:', placeData);
         } else {
           console.log(
-            'Place saved successfully:',
+            '✅ PLACE SAVED SUCCESSFULLY:',
             data
           );
         }
       }
     } catch (error) {
       console.error(
-        'Supabase place save exception:',
+        '❌ Supabase place save exception:',
         error
       );
     }
