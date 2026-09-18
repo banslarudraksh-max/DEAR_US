@@ -2148,7 +2148,6 @@ async getBucketList(): Promise<BucketListItem[]> {
     );
   }
   }
-  async deleteMediaItem(
 async deleteMediaItem(
   id: string,
   url?: string
