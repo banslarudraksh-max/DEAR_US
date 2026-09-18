@@ -416,11 +416,19 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
   };
 
   const handleDeleteMedia = async (id: string, url: string) => {
-    await vaultStorage.deleteMediaItem(id);
-    const updated = await vaultStorage.getMediaLibrary();
-    setMediaList(updated);
-    await recordAudit('delete', 'Vault', id, 'Media Asset', `Deleted photo asset from vault library`);
-  };
+  await vaultStorage.deleteMediaItem(id, url);
+
+  const updated = await vaultStorage.getMediaLibrary();
+  setMediaList(updated);
+
+  await recordAudit(
+    'delete',
+    'Vault',
+    id,
+    'Media Asset',
+    'Deleted photo asset from vault library'
+  );
+};
 
   // 10. Categories & Moods
   const handleSaveCategory = async (cat: CategoryItem) => {
