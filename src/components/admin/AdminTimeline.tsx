@@ -68,7 +68,7 @@ export const AdminTimeline: React.FC<AdminTimelineProps> = ({
     setPhotoItems([]);
     setEditingEvent({
       id: `tl-${Date.now()}`,
-      userId: 'partner-1',
+      userId: currentUser,
       title: '',
       date: new Date().toISOString().split('T')[0],
       description: '',
@@ -136,7 +136,7 @@ export const AdminTimeline: React.FC<AdminTimelineProps> = ({
 
       const finalEvent: TimelineEvent = {
         id: eventId,
-        userId: editingEvent.userId || 'partner-1',
+        userId: editingEvent.userId || currentUser,
         title: editingEvent.title,
         date: editingEvent.date,
         description: editingEvent.description || '',
