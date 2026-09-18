@@ -667,40 +667,110 @@ class VaultStorageService {
   }
 
   async saveLetter(letter: FutureLetter): Promise<FutureLetter> {
-    const letters = await this.getLetters();
-    const idx = letters.findIndex((l) => l.id === letter.id);
-    let updated: FutureLetter[];
-    if (idx >= 0) {
-      updated = [...letters];
-      updated[idx] = letter;
-    } else {
-      updated = [letter, ...letters];
-    }
-    saveToStorage(STORAGE_KEYS.LETTERS, updated);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('letters').upsert({
-          id: letter.id,
-          sender_id: letter.senderId,
-          sender_name: letter.senderName,
-          recipient_name: letter.recipientName,
-          title: letter.title,
-          message: letter.message,
-          created_date: letter.createdDate,
-          unlock_date: letter.unlockDate,
-          photo_url: letter.photoUrl,
-          song_title: letter.songTitle,
-          song_url: letter.songUrl,
-          voice_note_url: letter.voiceNoteUrl || letter.songUrl,
-          is_opened: letter.isOpened,
-          seal_color: letter.sealColor,
-        });
-      } catch (e) {
-        console.warn('Supabase letter save error:', e);
-      }
-    }
+  // 1. Get existing letters
+  const letters = await this.getLetters();
+
+  // 2. Update existing letter or add new letter
+  const idx = letters.findIndex((l) => l.id === letter.id);
+
+  let updated: FutureLetter[];
+
+  if (idx >= 0) {
+    updated = [...letters];
+    updated[idx] = letter;
+  } else {
+    updated = [letter, ...letters];
+  }
+
+  // 3. Local cache
+  saveToStorage(STORAGE_KEYS.LETTERS, updated);
+
+  // 4. Supabase
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    console.warn(
+      'Supabase client not available. Letter saved locally only.'
+    );
     return letter;
+  }
+
+  try {
+    // Get authenticated user
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error(
+        'Could not get authenticated user:',
+        authError
+      );
+      return letter;
+    }
+
+    if (!user?.id) {
+      console.error(
+        'Letter save failed: No authenticated user found.'
+      );
+      return letter;
+    }
+
+    const letterRow = {
+      id: letter.id,
+      sender_id: user.id,
+      sender_name: letter.senderName || '',
+      recipient_name: letter.recipientName || '',
+      title: letter.title || '',
+      message: letter.message || '',
+      photo_url: letter.photoUrl || null,
+      created_date: letter.createdDate || null,
+      unlock_date: letter.unlockDate || null,
+      is_opened: letter.isOpened ?? false,
+      opened_at: letter.openedAt || null,
+      seal_color: letter.sealColor || null,
+    };
+
+    console.log(
+      'Saving Future Letter to Supabase:',
+      letterRow
+    );
+
+    const { data, error } = await supabase
+      .from('future_letters')
+      .upsert(letterRow, {
+        onConflict: 'id',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(
+        'Supabase Future Letter save error:',
+        error.message,
+        error.details,
+        error.hint,
+        error.code
+      );
+
+      return letter;
+    }
+
+    console.log(
+      'Future Letter successfully saved:',
+      data
+    );
+
+    return letter;
+  } catch (error) {
+    console.error(
+      'Supabase Future Letter save exception:',
+      error
+    );
+
+    return letter;
+  }
   }
 
   async deleteLetter(id: string): Promise<void> {
