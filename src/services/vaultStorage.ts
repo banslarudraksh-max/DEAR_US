@@ -1340,63 +1340,106 @@ async getBucketList(): Promise<BucketListItem[]> {
   }
 
   // Upload helper: Handles file to Supabase storage OR optimized Base64
-  async uploadFile(file: File, bucket: 'memories' | 'avatars' | 'audio' = 'memories'): Promise<string> {
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error('File size exceeds the 10MB limit.');
-    }
+  async uploadFile(
+  file: File,
+  bucket: 'memories' | 'avatars' | 'audio' | 'vault-photos' = 'memories'
+): Promise<string> {
+  // Validate file size
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error('File size exceeds the 20MB limit.');
+  }
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const fileExt = file.name.split('.').pop() || 'jpg';
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-        const filePath = `${bucket}/${fileName}`;
+  const supabase = getSupabaseClient();
 
-        const { error: uploadError } = await supabase.storage
-  .from(bucket)
-  .upload(filePath, file);
+  if (supabase) {
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
 
-if (!uploadError) {
-  if (bucket === 'memories') {
-    const { data: signedData, error: signedError } =
-      await supabase.storage
-        .from('memories')
-        .createSignedUrl(filePath, 3600);
+      const fileName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 9)}.${fileExt}`;
 
-    if (!signedError && signedData?.signedUrl) {
-      return signedData.signedUrl;
-    }
+      const filePath = `${fileName}`;
 
-    console.warn('Failed to create signed URL:', signedError);
-  } else {
-    const { data } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(filePath);
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
 
-    if (data?.publicUrl) {
-      return data.publicUrl;
+      if (!uploadError) {
+        // Media Library / public photo bucket
+        if (bucket === 'vault-photos') {
+          const { data } = supabase.storage
+            .from('vault-photos')
+            .getPublicUrl(filePath);
+
+          if (data?.publicUrl) {
+            return data.publicUrl;
+          }
+        }
+
+        // Existing memories behavior
+        if (bucket === 'memories') {
+          const { data: signedData, error: signedError } =
+            await supabase.storage
+              .from('memories')
+              .createSignedUrl(filePath, 3600);
+
+          if (!signedError && signedData?.signedUrl) {
+            return signedData.signedUrl;
+          }
+
+          console.warn(
+            'Failed to create signed URL:',
+            signedError
+          );
+        }
+
+        // Existing public buckets
+        if (bucket === 'avatars' || bucket === 'audio') {
+          const { data } = supabase.storage
+            .from(bucket)
+            .getPublicUrl(filePath);
+
+          if (data?.publicUrl) {
+            return data.publicUrl;
+          }
+        }
+      } else {
+        console.error(
+          '❌ Supabase storage upload error:',
+          uploadError
+        );
+      }
+    } catch (err) {
+      console.warn(
+        'Supabase storage upload failed:',
+        err
+      );
     }
   }
-}
-      } catch (err) {
-        console.warn('Supabase storage upload failed, falling back to local data URL:', err);
-      }
-    }
 
-    // Fallback: Convert to Data URL
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-        } else {
-          reject(new Error('Failed to read file as Data URL'));
-        }
-      };
-      reader.onerror = () => reject(new Error('File reading error'));
-      reader.readAsDataURL(file);
-    });
+  // Fallback: Data URL
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(
+          new Error('Failed to read file as Data URL')
+        );
+      }
+    };
+
+    reader.onerror = () =>
+      reject(new Error('File reading error'));
+
+    reader.readAsDataURL(file);
+  });
   }
 
   // Special Dates
