@@ -584,40 +584,87 @@ class VaultStorageService {
   }
 
   async savePlace(place: PlaceMemory): Promise<PlaceMemory> {
-    const places = await this.getPlaces();
-    const idx = places.findIndex((p) => p.id === place.id);
-    let updated: PlaceMemory[];
-    if (idx >= 0) {
-      updated = [...places];
-      updated[idx] = place;
-    } else {
-      updated = [place, ...places];
-    }
-    saveToStorage(STORAGE_KEYS.PLACES, updated);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('places').upsert({
-          id: place.id,
-          user_id: place.userId,
-          name: place.name,
-          location: place.location,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          date: place.date,
-          cover_image: place.coverImage,
-          photos: place.photos,
-          notes: place.notes,
-          related_memory_ids: place.relatedMemoryIds,
-          is_visited: place.isVisited,
-        });
-      } catch (e) {
-        console.warn('Supabase place save error:', e);
-      }
-    }
-    return place;
+  const places = await this.getPlaces();
+
+  const idx = places.findIndex((p) => p.id === place.id);
+
+  let updated: PlaceMemory[];
+
+  if (idx >= 0) {
+    updated = [...places];
+    updated[idx] = place;
+  } else {
+    updated = [place, ...places];
   }
 
+  // Save locally
+  saveToStorage(STORAGE_KEYS.PLACES, updated);
+
+  // Save to Supabase
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        console.warn(
+          'No authenticated user for place save:',
+          userError
+        );
+      } else {
+        const user = userData.user;
+
+        const { data, error } = await supabase
+          .from('places')
+          .upsert({
+            id: place.id,
+            user_id: user.id,
+
+            name: place.name,
+            location: place.location,
+            country: place.country || null,
+
+            latitude: place.latitude ?? null,
+            longitude: place.longitude ?? null,
+
+            date: place.date || null,
+            visit_date: place.visitDate || place.date || null,
+
+            cover_image: place.coverImage || null,
+            photos: place.photos || [],
+
+            notes: place.notes || null,
+            related_memory_ids: place.relatedMemoryIds || [],
+
+            is_visited: place.isVisited ?? false,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error(
+            'Supabase place save error:',
+            error
+          );
+        } else {
+          console.log(
+            'Place saved successfully:',
+            data
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        'Supabase place save exception:',
+        error
+      );
+    }
+  }
+
+  return place;
+  }
   async deletePlace(id: string): Promise<void> {
     const places = await this.getPlaces();
     const filtered = places.filter((p) => p.id !== id);
