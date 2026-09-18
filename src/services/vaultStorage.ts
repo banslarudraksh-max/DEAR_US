@@ -122,111 +122,140 @@ class VaultStorageService {
 
   // Memories
     async getMemories(): Promise<Memory[]> {
-    const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient();
 
-    if (supabase) {
-      try {
-        // Fetch memories
-        const { data, error } = await supabase
-          .from('memories')
-          .select('*')
-          .order('date', { ascending: false });
+  if (supabase) {
+    try {
+      // Fetch memories
+      const { data, error } = await supabase
+        .from('memories')
+        .select('*')
+        .order('date', { ascending: false });
 
-        if (!error && data && data.length > 0) {
-          // Fetch all photos stored in memory_photos
-          const {
-            data: photoData,
-            error: photoError,
-          } = await supabase
-            .from('memory_photos')
-            .select('memory_id, photo_url, sort_order')
-            .order('sort_order', { ascending: true });
+      if (!error && data && data.length > 0) {
+        // Fetch all photos stored in memory_photos
+        const {
+          data: photoData,
+          error: photoError,
+        } = await supabase
+          .from('memory_photos')
+          .select('memory_id, photo_url, sort_order')
+          .order('sort_order', { ascending: true });
 
-          if (photoError) {
-            console.warn(
-              'Supabase memory_photos fetch error:',
-              photoError.message
-            );
-          }
-
-          // Group photos by memory ID
-          const photosByMemory = new Map<string, string[]>();
-
-          if (!photoError && photoData) {
-            photoData.forEach((photo: any) => {
-              if (!photo.memory_id || !photo.photo_url) return;
-
-              const existing =
-                photosByMemory.get(photo.memory_id) || [];
-
-              existing.push(photo.photo_url);
-
-              photosByMemory.set(
-                photo.memory_id,
-                existing
-              );
-            });
-          }
-
-          const mapped: Memory[] = data.map((d: any) => {
-            const databasePhotos =
-              photosByMemory.get(d.id) || [];
-
-            // Prefer memory_photos table.
-            // Fall back to the photos JSON array in memories.
-            const photos =
-              databasePhotos.length > 0
-                ? databasePhotos
-                : (Array.isArray(d.photos)
-                    ? d.photos
-                    : []);
-
-            return {
-              id: d.id,
-              userId: d.user_id,
-              creatorName: d.creator_name,
-              title: d.title,
-              date: d.date,
-              description: d.description,
-              photos,
-              location: d.location,
-              latitude: d.latitude,
-              longitude: d.longitude,
-              mood: d.mood,
-              category: d.category,
-              tags: d.tags || [],
-              isFavorite: d.is_favorite,
-              isPrivate: d.is_private,
-              voiceNoteUrl: d.voice_note_url,
-              voiceNoteDuration: d.voice_note_duration,
-              songTitle: d.song_title,
-              songUrl: d.song_url,
-              reactions: d.reactions || [],
-              createdAt: d.created_at,
-              updatedAt: d.updated_at,
-            };
-          });
-
-          // Keep local cache synchronized
-          saveToStorage(
-            STORAGE_KEYS.MEMORIES,
-            mapped
+        if (photoError) {
+          console.warn(
+            'Supabase memory_photos fetch error:',
+            photoError.message
           );
-
-          return mapped;
         }
-      } catch (err) {
+
+        // Group photos by memory ID
+        const photosByMemory = new Map<string, string[]>();
+
+        if (!photoError && photoData) {
+          photoData.forEach((photo: any) => {
+            if (!photo.memory_id || !photo.photo_url) return;
+
+            const existing =
+              photosByMemory.get(photo.memory_id) || [];
+
+            existing.push(photo.photo_url);
+
+            photosByMemory.set(
+              photo.memory_id,
+              existing
+            );
+          });
+        }
+
+        const mapped: Memory[] = data.map((d: any) => {
+          // Photos saved directly inside memories.photos
+          const memoryPhotos = Array.isArray(d.photos)
+            ? d.photos.filter(
+                (url: any) =>
+                  typeof url === 'string' &&
+                  url.trim().length > 0
+              )
+            : [];
+
+          // Photos saved inside memory_photos table
+          const databasePhotos =
+            photosByMemory.get(d.id) || [];
+
+          /*
+           * Prefer memories.photos because this is the
+           * permanent public URL saved by the current
+           * direct-upload system.
+           *
+           * Only fall back to memory_photos when
+           * memories.photos is empty.
+           */
+          const photos =
+            memoryPhotos.length > 0
+              ? memoryPhotos
+              : databasePhotos;
+
+          return {
+            id: d.id,
+            userId: d.user_id,
+            creatorName: d.creator_name,
+            title: d.title,
+            date: d.date,
+            description: d.description,
+            photos,
+
+            location: d.location,
+            latitude: d.latitude,
+            longitude: d.longitude,
+
+            mood: d.mood,
+            category: d.category,
+            tags: d.tags || [],
+
+            isFavorite: d.is_favorite,
+            isPrivate: d.is_private,
+
+            voiceNoteUrl: d.voice_note_url,
+            voiceNoteDuration: d.voice_note_duration,
+
+            songTitle: d.song_title,
+            songUrl: d.song_url,
+
+            reactions: d.reactions || [],
+
+            createdAt: d.created_at,
+            updatedAt: d.updated_at,
+          };
+        });
+
+        // Keep local cache synchronized
+        saveToStorage(
+          STORAGE_KEYS.MEMORIES,
+          mapped
+        );
+
+        return mapped;
+      }
+
+      if (error) {
         console.warn(
-          'Supabase memories fetch error, falling back to local:',
-          err
+          'Supabase memories query error:',
+          error.message
         );
       }
+    } catch (err) {
+      console.warn(
+        'Supabase memories fetch error, falling back to local:',
+        err
+      );
     }
+  }
 
-    return loadFromStorage<Memory[]>(
-      STORAGE_KEYS.MEMORIES,
-      demoMemories
-    );
+  // Fallback to local storage
+  return loadFromStorage<Memory[]>(
+    STORAGE_KEYS.MEMORIES,
+    demoMemories
+  );
     }
 
   async saveMemory(memory: Memory): Promise<Memory> {
