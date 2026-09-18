@@ -2149,27 +2149,18 @@ async getBucketList(): Promise<BucketListItem[]> {
   }
   }
   async deleteMediaItem(
+async deleteMediaItem(
   id: string,
   url?: string
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
-  // Remove from localStorage
-  const list = await this.getMediaLibrary();
-  const updated = list.filter((m) => m.id !== id);
-
-  saveToStorage(
-    STORAGE_KEYS.MEDIA_ITEMS,
-    updated
-  );
-
   if (!supabase) {
-    console.warn('Supabase client not available');
-    return;
+    throw new Error('Supabase client not available');
   }
 
   try {
-    // Get logged-in user
+    // 1. Get logged-in user
     const { data: userData, error: userError } =
       await supabase.auth.getUser();
 
@@ -2181,27 +2172,64 @@ async getBucketList(): Promise<BucketListItem[]> {
 
     const user = userData.user;
 
-    // Delete database record
-    const { error: dbError } = await supabase
-      .from('media_assets')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
+    // 2. Find the actual media record
+    const { data: media, error: findError } =
+      await supabase
+        .from('media_assets')
+        .select('id, url')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    if (dbError) {
-      throw dbError;
+    if (findError) {
+      throw findError;
     }
 
-    // Delete actual image from vault-photos
-    if (url) {
+    const imageUrl = url || media?.url;
+
+    // 3. Delete ALL duplicate database records
+    // having the same URL
+    if (imageUrl) {
+      const { error: dbError } =
+        await supabase
+          .from('media_assets')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('url', imageUrl);
+
+      if (dbError) {
+        console.error(
+          '❌ Media database delete error:',
+          dbError
+        );
+        throw dbError;
+      }
+    } else {
+      // Fallback: delete by ID
+      const { error: dbError } =
+        await supabase
+          .from('media_assets')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+      if (dbError) {
+        throw dbError;
+      }
+    }
+
+    // 4. Delete actual file from Supabase Storage
+    if (imageUrl) {
       const marker =
         '/storage/v1/object/public/vault-photos/';
 
-      const index = url.indexOf(marker);
+      const index = imageUrl.indexOf(marker);
 
       if (index !== -1) {
         const filePath =
-          url.substring(index + marker.length);
+          imageUrl.substring(
+            index + marker.length
+          );
 
         const { error: storageError } =
           await supabase.storage
@@ -2210,15 +2238,29 @@ async getBucketList(): Promise<BucketListItem[]> {
 
         if (storageError) {
           console.error(
-            'Storage delete error:',
+            '❌ Storage delete error:',
             storageError
+          );
+        } else {
+          console.log(
+            '✅ Storage file deleted:',
+            filePath
           );
         }
       }
     }
 
+    // 5. Refresh localStorage from Supabase
+    const refreshedList =
+      await this.getMediaLibrary();
+
+    saveToStorage(
+      STORAGE_KEYS.MEDIA_ITEMS,
+      refreshedList
+    );
+
     console.log(
-      '✅ Media deleted successfully'
+      '✅ Media asset and duplicates deleted successfully'
     );
   } catch (error) {
     console.error(
