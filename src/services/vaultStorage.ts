@@ -73,28 +73,53 @@ function saveToStorage<T>(key: string, value: T): void {
 class VaultStorageService {
   // Profiles
   async getProfile(): Promise<UserProfile> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('profiles').select('*').limit(1).single();
-        if (!error && data) {
-          return {
-            id: data.id,
-            email: data.email,
-            name: data.name,
-            partnerName: data.partner_name,
-            relationshipStartDate: data.relationship_start_date,
-            avatarUrl: data.avatar_url,
-            partnerAvatarUrl: data.partner_avatar_url,
-            anniversaryTitle: data.anniversary_title,
-            customQuote: data.custom_quote,
-          };
-        }
-      } catch (err) {
-        console.warn('Supabase profile fetch error, falling back to local:', err);
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+
+      if (!userId) {
+        throw new Error('User not authenticated');
       }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        return {
+          id: data.id,
+          email: data.email,
+          name: data.name,
+          partnerName: data.partner_name,
+          role: data.role,
+          relationshipStartDate: data.relationship_start_date,
+          avatarUrl: data.avatar_url,
+          partnerAvatarUrl: data.partner_avatar_url,
+          anniversaryTitle: data.anniversary_title,
+          anniversaryDate: data.anniversary_date,
+          meetingDate: data.meeting_date,
+          customQuote: data.custom_quote,
+          vaultPasscode: undefined,
+        };
+      }
+    } catch (err) {
+      console.warn(
+        'Supabase profile fetch error, falling back to local:',
+        err
+      );
     }
-    return loadFromStorage(STORAGE_KEYS.PROFILE, initialProfile);
+  }
+
+  return loadFromStorage(STORAGE_KEYS.PROFILE, initialProfile);
   }
 
   async saveProfile(profile: UserProfile): Promise<void> {
